@@ -1,0 +1,27 @@
+#This Software is all Rights Reserved CDN in a Box Copyright, 2008-2014
+#CDN in a Box is free for non-commercial use.
+#If you run ads on your website, or you sell services or merchandise you are commercial use.
+#A license can be obtained through http://www.cdninabox.com/
+#Full Versions of this software can be used on Naked Domains, or support multiple domains
+#Licensed under Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International
+# https://creativecommons.org/licenses/by-nc-nd/4.0/legalcode
+
+#application: yourappname
+application: myfirstapp
+#version can't have a . in it really stupid
+version: proxy
+runtime: python27
+threadsafe: yes
+api_version: 1
+
+handlers:
+- url: /
+  script: mirror.app
+- url: /.*
+  script: mirror.app
+  
+# If using static files th
+# - url: /(.*\.(gif|png|js|jpg|css)$
+#  static_files: static/\1
+#  upload: static/.*\.(gif|png|js|jpg|css)$
+

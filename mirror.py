@@ -3,6 +3,8 @@
 #If you run ads on your website, or you sell services or merchandise you are commercial use.
 #A license can be obtained through http://www.cdninabox.com/
 #Full Versions of this software can be used on Naked Domains, or support multiple domains
+#Additional features such as the ability to extend caching if the source is down, and support
+#for sessions are only in the commercial version.
 #Licensed under Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International
 # https://creativecommons.org/licenses/by-nc-nd/4.0/legalcode
 import re
@@ -33,35 +35,43 @@ jqversion = '1.11.1'
 #Adds Title Tags to Anchors, and a Description if there is none.
 doseo = True
 
-#This is your install location. If running local it will be 'localhost:8080' if Appengine with out domain will be something.appspot.com
-defaultinstalldomain = 'localhost:8080'
+#Precache does a look ahead to fetch sourced assets before they are requested by the client (this can be expensive if you have lots of bot traffic)
+precache = True
 
 #Typically this will be the Naked Domain, Set up Appengine to be the www for the domain.
 source = 'xyhd.tv'
 #todo support multiple domains (paid license only)
 
-#this is the time in seconds URL Fetch will wait. If you set to 60 things will break, if you set to small things may timeout.
+#this is the time in seconds URL Fetch will wait. If you set to 60 things will break, if you set too small things may timeout.
 howslow = 45
 
 #CACHE_EXPIRE time in Seconds remember that if you set 60 and your content changes you might not see it for a minute.
 CACHE_EXPIRE = 3600
 CACHE_EXPIRE_ROOT = 120
+CACHE_EXPIRE_SCRIPT = 604801
+CACHE_EXPIRE_IMAGE = 604801
 
 
 
 
 
 def bw_proxy(url,method = 'get',postdata = '',domain = '', headers = ''):
-    if domain == '':
-        domain = defaultinstalldomain
+    BW_CACHE_EXPIRE = CACHE_EXPIRE
+    if '.js' in url:
+        BW_CACHE_EXPIRE = CACHE_EXPIRE_SCRIPT
+    if '.jpg' in url or '.gif' in url or '.png' in url:
+        BW_CACHE_EXPIRE = CACHE_EXPIRE_IMAGE
+    if url.endswith(domain+'/') or url.endswith(domain):
+        BW_CACHE_EXPIRE = CACHE_EXPIRE_ROOT
+
     if method == 'get':
-        urlhash = str(hashlib.md5(url))
+        urlhash = str(hashlib.md5(url).hexdigest())
         urldata = memcache.get(urlhash)
         if urldata is not None:
             result = pickle.loads(urldata)
         else:
             result = urlfetch.fetch(url,deadline=howslow)
-            memcache.add(urlhash,pickle.dumps(result),CACHE_EXPIRE)
+            memcache.add(urlhash,pickle.dumps(result),BW_CACHE_EXPIRE)
 
 
         #to make a broad proxy don't do the replace below, and adjust the source to be ''
@@ -97,15 +107,34 @@ def bw_proxy(url,method = 'get',postdata = '',domain = '', headers = ''):
                         linkreplacement = link.replace('href','title="'+ linktitle.group(1) +'" href')
                         result.content = result.content.replace(link,linkreplacement )
         result.content = result.content.replace('http:///','http://')
+
+        if precache == True:
+            rpcs = []
+            for src in list(set(re.findall(r"src=\"(.*?)\"",result.content))):
+                if src.startswith('http://'+ domain):
+                    rpc = urlfetch.create_rpc(deadline = 1)
+                    urlfetch.make_fetch_call(rpc, src, follow_redirects=True, validate_certificate=False)
+                    rpcs.append(rpc)
+
+            rpcs = []
+            for src in list(set(re.findall(r"src='(.*?)'",result.content))):
+                if src.startswith('http://'+ domain):
+                    rpc = urlfetch.create_rpc(deadline = 1)
+
+                    urlfetch.make_fetch_call(rpc, src, follow_redirects=True, validate_certificate=False)
+                    rpcs.append(rpc)
+
     return result
 
 class mirror(webapp2.RequestHandler):
     def get(self):
         servingdomain = self.request.url.split(self.request.path)[0][7:]
+        servingdomain = self.request.url.split('/')[2]
         if self.request.query_string != '':
             urltofetch = 'http://www.' + source + self.request.path +'?'+  self.request.query_string
         else:
             urltofetch = 'http://www.' + source + self.request.path
+
         try:
             toout = bw_proxy(urltofetch,domain = servingdomain)
         except:
